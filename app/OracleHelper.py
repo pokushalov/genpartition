@@ -61,7 +61,7 @@ class OracleHelper:
             self.logger.critical(f"cx_Oracle error: {e.args[0]}")
             exit(-1)
 
-    def runPLSQL_noret(self, sql)->None:
+    def runPLSQL(self, sql)->None:
         if self.debug_sql:
             self.logger.debug(f"Running SQL [ sql]: {sql['sql']}")
             self.logger.debug(f"Running SQL [desc]: {sql['desc']}")

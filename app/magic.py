@@ -26,10 +26,15 @@ def main() -> int:
     logger.add("logs/magic.log", rotation="1 days", backtrace=True)
     logger.debug("Application started")
     conn1 = OracleHelper(conn1_info, logger, debug_sql=True)
+    # TODO: cnage hard coded to comman line parameters
     conn1._connect(username='test', password='test')
-    src_table = ('TEST2', 'TEST')
-    src_table_ddl = ('TABLE', 'TEST2', 'TEST')
-
+    # TODO: cnage hard coded to comman line parameters
+    _table_name = 'TEST'
+    _table_owner = 'TEST2'
+    # generate tuples
+    src_table = (_table_owner, _table_name)
+    src_table_ddl = ('TABLE', _table_owner, _table_name)
+    # don't forget to rename table:
     # for constraints and indexes we will create dictionaries so we can store
     # them to get DDL for later usage
     # get all constraints for this table
@@ -68,7 +73,6 @@ def main() -> int:
     for item in res:
         logger.debug(f"Table size: {item[0]:,}")
     # for all indexes
-
     for value in all_indexes:
         logger.debug(f"Getting size for the index {value[0]}.{value[1]}")
         idx_tuple = (value[0], value[1])
@@ -90,81 +94,58 @@ def main() -> int:
             logger.warning(f"We don't have enough space in TBS, need to add {abs(free_space_proficit):,}")
             action_plan.append(["ERROR",
                                 f"Please consider adding {abs(free_space_proficit):,} bytes to {key} tablespace [ {abs(free_space_proficit)} ]"])
+    # Rename table to different name so we can create new  one:
+    action_plan.append(['ADVISE', "-- Rename table "])
+    action_plan.append(['ADVISE', f"alter table {_table_owner}.{_table_owner} rename to {_table_name}_old;"])
+    action_plan.append(['ADVISE', "-- Drop current indexes "])
+    for item in all_indexes:
+        action_plan.append(["ADVISE", f"drop index {item[0]}.{item[1]};"])
 
     # get ALL DDL's for table
     # let's prepare session before getting DDLs
-    conn1.runPLSQL_noret(sqls.sql['prepare_extract_ddl'])
 
+    conn1.runPLSQL(sqls.sql['prepare_extract_ddl'])
+    action_plan.append(['ADVISE', "-- Generate table DDL "])
     res = conn1.runSelect(sqls.sql['object_ddl'], src_table_ddl)
     for item in res:
         logger.info(item[0])
         action_plan.append(['ADVISE', item[0]])
-
+    action_plan.append(['ADVISE', "-- Generate constraint DDLs "])
     for (key, value) in constraints.items():
         tpl_constraint = ('CONSTRAINT', value[0], value[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
-
+    action_plan.append(['ADVISE', "-- Generated INDEX DDLs "])
     for item in all_indexes:
         tpl_index = ('INDEX', item[0], item[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_index)
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
-
+    action_plan.append(['ADVISE', "-- Triggers "])
     for item in all_triggers:
         tpl_trigger = ('TRIGGER', item[0], item[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_trigger)
         action_plan.append(['ADVISE', res[0][0]])
+    action_plan.append(['ADVISE', "-- Grants "])
+    # get grants on this table
+    res = conn1.runSelect(sqls.sql['get_all_grants'], src_table)
+    for item in res:
+        logger.debug(f"Extracted grant: {item[0]}")
+        action_plan.append(['ADVISE', item[0]])
+
 
     logger.info("Action items and step by step plan below:")
+    advise_file = open(f"{_table_owner}_{_table_name}.txt", "w")
     for action_item in action_plan:
-        logger.debug('-------------------------------------')
         if action_item[0] == 'ERROR':
             logger.error(action_item[1])
         else:
             logger.info(action_item[1])
+        advise_file.write("\n" + str(action_item[1]) + "\n")
+    advise_file.close()
+    # print statements in file
 
-    return 0
-    # not it is time to get indexes sized
-    # this is end of script debug print
-    logger.debug("*" * 79)
-    logger.debug("Table constraints")
-    logger.debug(constraints)
-    logger.debug("Pre-created indexes")
-    logger.debug(auto_created_indexes)
-    logger.debug("Indexes")
-    logger.debug(indexes)
-    logger.debug("Usage per TBS")
-    logger.debug(usage)
-
-    ####
-    return 0
-    ########################################################################################################################
-    ########################################################################################################################
-    ########################################################################################################################
-
-    res = conn1.runSelect(sqls.sql['all_tables'], src_table_ddl)
-    for item in res:
-        print(item)
-
-    # get all constraints
-    res = conn1.runSelect(sqls.sql['all_constraints'], )
-    all_constraints = {}
-
-    res = conn1.runSelect(sqls.sql['object_ddl'], src_table)
-    for item in res:
-        print(item[0])
-
-    src_index = ('CONSTRAINT', 'TEST2', 'TEST_PK')
-    res = conn1.runSelect(sqls.sql['object_ddl'], src_index)
-    for item in res:
-        print(item[0])
-
-    src_index = ('CONSTRAINT', 'TEST2', 'ck_check_val')
-    res = conn1.runSelect(sqls.sql['object_ddl'], src_index)
-    for item in res:
-        print(item[0])
 
 
 if __name__ == "__main__":
