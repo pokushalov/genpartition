@@ -106,6 +106,7 @@ def main() -> int:
 
     conn1.runPLSQL(sqls.sql['prepare_extract_ddl'])
     action_plan.append(['ADVISE', "-- Generate table DDL "])
+    action_plan.append(['ADVISE', "-- PLEASE ADD PARTITION PART INTO THIS SCRIPT "])
     res = conn1.runSelect(sqls.sql['object_ddl'], src_table_ddl)
     for item in res:
         logger.info(item[0])
@@ -114,12 +115,14 @@ def main() -> int:
     for (key, value) in constraints.items():
         tpl_constraint = ('CONSTRAINT', value[0], value[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
+        res[0][0] = str(res[0][0]).replace ("USING INDEX", "USING INDEX LOCAL")
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
     action_plan.append(['ADVISE', "-- Generated INDEX DDLs "])
     for item in all_indexes:
         tpl_index = ('INDEX', item[0], item[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_index)
+        res[0][0] = str(res[0][0]).replace(";", "local;")
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
     action_plan.append(['ADVISE', "-- Triggers "])
