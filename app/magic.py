@@ -2,17 +2,16 @@ import sys
 from loguru import logger
 from OracleHelper import OracleHelper
 import sqls
+import config
 ########################################################################################################################
 def main() -> int:
     #  TODO - Check if table already partitioned
     #  TODO - DROP Constraint as well
+    # init values
+    conn1_info = config.database_connection
 
-    conn1_info = {
-        "connection_type": "direct",
-        "host_name": "localhost",
-        "service_name": "XE",
-        "port": "1521"
-    }
+    _table_name = 'TEST'
+    _table_owner = 'TEST2'
     # for all constraints
     constraints = {}
     usage = {}
@@ -29,11 +28,9 @@ def main() -> int:
     logger.add("logs/magic.log", rotation="1 days", backtrace=True)
     logger.debug("Application started")
     conn1 = OracleHelper(conn1_info, logger, debug_sql=True)
+    conn1._connect(username=config.database_auth['username'], password=config.database_auth['password'])
     # TODO: cnage hard coded to command line parameters
-    conn1._connect(username='test', password='test')
-    # TODO: cnage hard coded to command line parameters
-    _table_name = 'TEST'
-    _table_owner = 'TEST2'
+
     # generate tuples
     src_table = (_table_owner, _table_name)
     src_table_ddl = ('TABLE', _table_owner, _table_name)
@@ -101,8 +98,9 @@ def main() -> int:
     action_plan.append(['ADVISE', "-- Rename table "])
     action_plan.append(['ADVISE', f"alter table {_table_owner}.{_table_name} rename to {_table_name}_old;"])
     action_plan.append(['ADVISE', "-- Drop constraints "])
-    for item in constraints:
-        action_plan.append(["ADVISE", f"alter table {_table_owner}.{_table_name} drop constraint {item[1]};"])
+    # check for constraint here - should be only name
+    for item in constraints.keys():
+        action_plan.append(["ADVISE", f"alter table {_table_owner}.{_table_name}_old drop constraint {item};"])
     action_plan.append(['ADVISE', "-- Drop current indexes "])
     for item in all_indexes:
         action_plan.append(["ADVISE", f"drop index {item[0]}.{item[1]};"])
@@ -111,7 +109,7 @@ def main() -> int:
     # let's prepare session before getting DDLs
 
     conn1.runPLSQL(sqls.sql['prepare_extract_ddl'])
-    action_plan.append(['ADVISE', "-- Generate table DDL "])
+    action_plan.append(['ADVISE', "-- Generated table DDL "])
     action_plan.append(['ADVISE', "-- PLEASE ADD PARTITION PART INTO THIS SCRIPT "])
     res = conn1.runSelect(sqls.sql['object_ddl'], src_table_ddl)
     for item in res:
@@ -124,7 +122,7 @@ def main() -> int:
         res[0][0] = str(res[0][0]).replace(";", "local;")
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
-    action_plan.append(['ADVISE', "-- Generate constraint DDLs "])
+    action_plan.append(['ADVISE', "-- Generated constraint DDLs "])
     for (key, value) in constraints.items():
         tpl_constraint = ('CONSTRAINT', value[0], value[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
