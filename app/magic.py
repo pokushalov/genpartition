@@ -117,13 +117,6 @@ def main() -> int:
     for item in res:
         logger.info(item[0])
         action_plan.append(['ADVISE', item[0]])
-    action_plan.append(['ADVISE', "-- Generate constraint DDLs "])
-    for (key, value) in constraints.items():
-        tpl_constraint = ('CONSTRAINT', value[0], value[1])
-        res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
-        res[0][0] = str(res[0][0]).replace ("USING INDEX", "USING INDEX  ")
-        logger.info(res[0][0])
-        action_plan.append(['ADVISE', res[0][0]])
     action_plan.append(['ADVISE', "-- Generated INDEX DDLs "])
     for item in all_indexes:
         tpl_index = ('INDEX', item[0], item[1])
@@ -131,6 +124,14 @@ def main() -> int:
         res[0][0] = str(res[0][0]).replace(";", "local;")
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
+    action_plan.append(['ADVISE', "-- Generate constraint DDLs "])
+    for (key, value) in constraints.items():
+        tpl_constraint = ('CONSTRAINT', value[0], value[1])
+        res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
+        res[0][0] = str(res[0][0]).replace ("USING INDEX", "USING INDEX  ")
+        logger.info(res[0][0])
+        action_plan.append(['ADVISE', res[0][0]])
+
     action_plan.append(['ADVISE', "-- Triggers "])
     for item in all_triggers:
         tpl_trigger = ('TRIGGER', item[0], item[1])
