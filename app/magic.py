@@ -4,6 +4,9 @@ from OracleHelper import OracleHelper
 import sqls
 ########################################################################################################################
 def main() -> int:
+    #  TODO - Check if table already partitioned
+    #  TODO - DROP Constraint as well
+
     conn1_info = {
         "connection_type": "direct",
         "host_name": "localhost",
@@ -96,7 +99,10 @@ def main() -> int:
                                 f"Please consider adding {abs(free_space_proficit):,} bytes to {key} tablespace [ {abs(free_space_proficit)} ]"])
     # Rename table to different name so we can create new  one:
     action_plan.append(['ADVISE', "-- Rename table "])
-    action_plan.append(['ADVISE', f"alter table {_table_owner}.{_table_owner} rename to {_table_name}_old;"])
+    action_plan.append(['ADVISE', f"alter table {_table_owner}.{_table_name} rename to {_table_name}_old;"])
+    action_plan.append(['ADVISE', "-- Drop constraints "])
+    for item in constraints:
+        action_plan.append(["ADVISE", f"alter table {_table_owner}.{_table_name} drop constraint {item[1]};"])
     action_plan.append(['ADVISE', "-- Drop current indexes "])
     for item in all_indexes:
         action_plan.append(["ADVISE", f"drop index {item[0]}.{item[1]};"])
@@ -115,7 +121,7 @@ def main() -> int:
     for (key, value) in constraints.items():
         tpl_constraint = ('CONSTRAINT', value[0], value[1])
         res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
-        res[0][0] = str(res[0][0]).replace ("USING INDEX", "USING INDEX LOCAL")
+        res[0][0] = str(res[0][0]).replace ("USING INDEX", "USING INDEX  ")
         logger.info(res[0][0])
         action_plan.append(['ADVISE', res[0][0]])
     action_plan.append(['ADVISE', "-- Generated INDEX DDLs "])
