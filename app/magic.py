@@ -29,9 +29,9 @@ def main() -> int:
     logger.add("logs/magic.log", rotation="1 days", backtrace=True)
     logger.debug("Application started")
     conn1 = OracleHelper(conn1_info, logger, debug_sql=True)
-    # TODO: cnage hard coded to comman line parameters
+    # TODO: cnage hard coded to command line parameters
     conn1._connect(username='test', password='test')
-    # TODO: cnage hard coded to comman line parameters
+    # TODO: cnage hard coded to command line parameters
     _table_name = 'TEST'
     _table_owner = 'TEST2'
     # generate tuples
@@ -144,6 +144,9 @@ def main() -> int:
         logger.debug(f"Extracted grant: {item[0]}")
         action_plan.append(['ADVISE', item[0]])
 
+    # adding last step for advice, fill newly created table and drop old one;
+    action_plan.append(['ADVISE', f"-- insert into  {_table_owner}.{_table_name} select * from {_table_owner}.{_table_name}_old;"])
+    action_plan.append(['ADVISE', f"-- drop table {_table_owner}.{_table_name}_old;"])
 
     logger.info("Action items and step by step plan below:")
     advise_file = open(f"{_table_owner}_{_table_name}.txt", "w")
