@@ -52,5 +52,15 @@ sql = {
         {
             "sql": "select 'grant ' || privilege || ' on ' || owner || '.' || table_name || ' to ' || grantee || ';'  from dba_tab_privs where owner='{}' and table_name = '{}'",
             "desc": "Getting all grants for object"
+        },
+    "table_precheck1":
+        {
+            "sql": "select count(1) from dba_tables where owner = '{}' and table_name = '{}'",
+            "desc": "Precheck for table 1: if exist"
+        },
+    "table_precheck2":
+        {
+            "sql": "select count(1) from dba_part_tables where owner = '{}' and table_name = '{}'",
+            "desc": "Precheck for table 2: if already partitioned"
         }
 }

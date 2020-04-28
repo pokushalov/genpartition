@@ -4,7 +4,3 @@ database_connection = {
     "service_name": "XE",
     "port": "1521"
 }
-database_auth = {
-    "username": "test",
-    "password": "test"
-}

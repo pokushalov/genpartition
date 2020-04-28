@@ -18,7 +18,7 @@ class OracleHelper:
             self.logger.critical(f"cx_Oracle error: {e.args[0]}")
 
 
-    def _connect(self, **kwargs):
+    def _connect(self, **kwargs) -> None:
         try:
             # 2DO: add check for connection type and change connection style depending on this
             if self.connection_info.get("connection_type", 'tns') == 'direct':
