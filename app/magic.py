@@ -23,8 +23,6 @@ def parseArgs():
 ########################################################################################################################
 
 def main() -> int:
-    #  TODO - Check if table already partitioned
-    #  TODO - DROP Constraint as well
     # init values
     try:
         logger.debug("Getting arguments")
@@ -51,7 +49,7 @@ def main() -> int:
         logger.debug("Application started")
         conn1 = OracleHelper(conn1_info, logger, debug_sql=True)
         conn1._connect(username=args.username, password=args.password)
-        # TODO: change hard coded to command line parameters / or config file
+
 
         # generate tuples
         src_table = (_table_owner, _table_name)
