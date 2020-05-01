@@ -1,16 +1,18 @@
 import sys
 from loguru import logger
+import argparse
+import re
 from OracleHelper import OracleHelper
 import sqls
 import config
-import argparse
 ###################################################
 __author__ = "Alex Pokushalov"
 __version__ = "1.0.1"
 __maintainer__ = "Alex Pokushalov"
 __email__ = "alex@$LASTNAME.com"
-
 ########################################################################################################################
+
+
 def parseArgs():
     parser = argparse.ArgumentParser(description='This is Partition Generator',
                                      epilog='--\nHave a great day from partition Merlin')
@@ -18,20 +20,36 @@ def parseArgs():
     parser.add_argument('--password', help='Password for DB connection', required=True)
     parser.add_argument('--owner', help='Table owner for parittioning process', required=True)
     parser.add_argument('--table', help='Table name for parittioning process', required=True)
+    parser.add_argument('--parallel', help='Add paralell clause to table insert and indexes', action='store_true')
+    parser.add_argument('--key', help='Partition key')
+    parser.add_argument('--remap', help='Partition key')
+
     parsed_args = parser.parse_args()
     return parsed_args
 ########################################################################################################################
+def remapTBS(p_sql: str,  remapping: dict) -> str:
+    # Function to remap tablespaces in SQL
+    sql = str(p_sql);
+    for k,v in remapping.items():
+        sql = re.sub(r'TABLESPACE\s+"' + k + '"', 'TABLESPACE "' + v + '"', sql)
+    return sql
+
+
 
 def main() -> int:
     # init values
     try:
+        remap = None
         logger.debug("Getting arguments")
         args = parseArgs()
+
+        if args.remap is not None:
+            remap = dict([pair.upper().strip().split(":") for pair in args.remap.split(",")])
+            logger.info (f"Tablespace remapping: {remap}")
         conn1_info = config.database_connection
 
         _table_owner = args.owner.upper()
         _table_name = args.table.upper()
-
         # for all constraints
         constraints = {}
         usage = {}
@@ -48,12 +66,13 @@ def main() -> int:
         logger.add("logs/magic.log", rotation="1 days", backtrace=True)
         logger.debug("Application started")
         conn1 = OracleHelper(conn1_info, logger, debug_sql=True)
-        conn1._connect(username=args.username, password=args.password)
-
+        conn1.connect(username=args.username, password=args.password)
 
         # generate tuples
         src_table = (_table_owner, _table_name)
         src_table_ddl = ('TABLE', _table_owner, _table_name)
+        action_plan.append(["INFO", f"Running script for {_table_owner},{_table_name}"])
+
         # pre-check step
         res = conn1.runSelect(sqls.sql['table_precheck1'], src_table)
         if res[0][0] == 0:
@@ -101,6 +120,8 @@ def main() -> int:
         res = conn1.runSelect(sqls.sql['table_size'], src_table)
         for item in res:
             logger.debug(f"Table size: {item[0]:,}")
+        # adding some useful info
+        action_plan.append(["INFO", f"-- Table size: {item[0]:,} MB."])
         # for all indexes
         for value in all_indexes:
             logger.debug(f"Getting size for the index {value[0]}.{value[1]}")
@@ -120,17 +141,24 @@ def main() -> int:
             res = conn1.runSelect(sqls.sql['tablespace_free_space'], tbs_name)
             free_space_in_tbs = res[0][1]
             logger.info(f"Total usage by objects in [{key}]: {value:,}, and free space is {free_space_in_tbs:,}")
+            action_plan.append(["INFO", f"-- Total usage by objects in [{key}]: {value:,}, and free space is {free_space_in_tbs:,}"])
+
             free_space_proficit = free_space_in_tbs - value
             if free_space_proficit > 0:
-                logger.success("We have enough space in TBS")
+                logger.success(f"We have enough space in tablespace {tbs_name}")
             else:
-                logger.warning(f"We don't have enough space in TBS, need to add {abs(free_space_proficit):,}")
+                logger.warning(f"We don't have enough space in tablespace {tbs_name}, need to add {abs(free_space_proficit):,}")
                 action_plan.append(["ERROR",
-                                    f"Please consider adding {abs(free_space_proficit):,} bytes to {key} tablespace [ {abs(free_space_proficit)} ]"])
+                                    f"-- Please consider adding {abs(free_space_proficit):,} bytes to {key} tablespace [ {abs(free_space_proficit)} ]"])
+
         # Rename table to different name so we can create new  one:
         action_plan.append(['ADVISE', "-- Rename table "])
         action_plan.append(['ADVISE', f"alter table {_table_owner}.{_table_name} rename to {_table_name}_old;"])
+        if args.key is not None:
+            action_plan.append(["INFO", "-- In order to get minimum and maximum partition key values:"])
+            action_plan.append(["INFO", f"select min({args.key}), max({args.key}) from {_table_owner}.{_table_name}_old"])
         action_plan.append(['ADVISE', "-- Drop constraints "])
+
         # check for constraint here - should be only name
         for item in constraints.keys():
             action_plan.append(["ADVISE", f"alter table {_table_owner}.{_table_name}_old drop constraint {item};"])
@@ -138,6 +166,7 @@ def main() -> int:
         for item in all_indexes:
             action_plan.append(["ADVISE", f"drop index {item[0]}.{item[1]};"])
 
+        #    D D L      Generation
         # get ALL DDL's for table
         # let's prepare session before getting DDLs
 
@@ -146,22 +175,46 @@ def main() -> int:
         action_plan.append(['ADVISE', "-- Generated table DDL "])
         action_plan.append(['ADVISE', "-- PLEASE ADD PARTITION PART INTO THIS SCRIPT "])
         res = conn1.runSelect(sqls.sql['object_ddl'], src_table_ddl)
-        # for table DDL we will remove SEGMENT CREATION DEFERRED for now
+        # for table DDL we will remove SEGMENT CREATION DEFERRED for now (causing some errors)
         for item in res:
             logger.info(item[0])
-            action_plan.append(['ADVISE', str(item[0]).replace("SEGMENT CREATION DEFERRED", "")])
+            if remap is not None:
+                item[0] = remapTBS(item[0], remap)
+            action_plan.append(['ADVISE', str(item[0]).replace("SEGMENT CREATION DEFERRED", "").replace(";","")])
+            action_plan.append(['ADVISE', ">>>>>>>> MANUAL PART HERE <<<<<<<<<"])
+            action_plan.append(['ADVISE', f" PARTITION BY [LIST / RANGE / ETC] ({args.key})(\n));"])
+            action_plan.append(['ADVISE', ">>>>>>>> MANUAL PART HERE <<<<<<<<<"])
+        # adding DATA copy for advice, fill newly created table and drop old one;
+        if args.parallel:
+            action_plan.append(['ADVISE', f"-- insert /*+ APPEND PARALLEL({_table_name}, 32 )*/ into {_table_owner}.{_table_name} select /*+ PARALLEL({_table_name}_old, 32)*/ * from {_table_owner}.{_table_name}_old;"])
+        else:
+            action_plan.append(['ADVISE', f"-- insert into  {_table_owner}.{_table_name} select * from {_table_owner}.{_table_name}_old;"])
+
+        action_plan.append(['ADVISE', f"-- drop table {_table_owner}.{_table_name}_old;"])
+
         action_plan.append(['ADVISE', "-- Generated INDEX DDLs "])
         for item in all_indexes:
             tpl_index = ('INDEX', item[0], item[1])
             res = conn1.runSelect(sqls.sql['object_ddl'], tpl_index)
-            res[0][0] = str(res[0][0]).replace(";", "local;")
+            if args.parallel:
+                res[0][0] = str(res[0][0]).replace(";", "local parallel 32;")
+            else:
+                res[0][0] = str(res[0][0]).replace(";", "local;")
+            if remap is not None:
+                res[0][0] = remapTBS(res[0][0], remap)
             logger.info(res[0][0])
+            # set indexes to noparallel after creating
             action_plan.append(['ADVISE', res[0][0]])
+            if args.parallel:
+                action_plan.append(['INFO', "-- Changing index to noparalle"])
+                action_plan.append(['ADVICE', f"alter index  {item[0]}.{item[1]} noparallel;"])
         action_plan.append(['ADVISE', "-- Generated constraint DDLs "])
         for (key, value) in constraints.items():
             tpl_constraint = ('CONSTRAINT', value[0], value[1])
             res = conn1.runSelect(sqls.sql['object_ddl'], tpl_constraint)
             res[0][0] = str(res[0][0]).replace("USING INDEX", "USING INDEX  ")
+            if remap is not None:
+                res[0][0] = remapTBS(res[0][0], remap)
             logger.info(res[0][0])
             action_plan.append(['ADVISE', res[0][0]])
 
@@ -177,10 +230,6 @@ def main() -> int:
             logger.debug(f"Extracted grant: {item[0]}")
             action_plan.append(['ADVISE', item[0]])
 
-        # adding last step for advice, fill newly created table and drop old one;
-        action_plan.append(['ADVISE', f"-- insert into  {_table_owner}.{_table_name} select * from {_table_owner}.{_table_name}_old;"])
-        action_plan.append(['ADVISE', f"-- drop table {_table_owner}.{_table_name}_old;"])
-
         logger.info("Action items and step by step plan below:")
         advise_file = open(f"{_table_owner}_{_table_name}.txt", "w")
         for action_item in action_plan:
@@ -188,9 +237,10 @@ def main() -> int:
                 logger.error(action_item[1])
             else:
                 logger.info(action_item[1])
+            # print statements in file
             advise_file.write("\n" + str(action_item[1]) + "\n")
         advise_file.close()
-        # print statements in file
+
     except OSError as e:
         errno, strerr = e.args
         logger.critical("OS error({0}): {1}".format(errno, strerr))

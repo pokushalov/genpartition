@@ -37,24 +37,29 @@ database_connection = {
 
 #### Command line parameters
 ```
-magic.py --table TABLE_TEST_DT --owner test --user test --password test
+magic.py --table TABLE_TEST_DT --owner test --user test --password test --key DT --parallel --remap "USERS:NEW\_USERS, USERS_IDX:NEW\_USER\_INDEXES"
 ```
 
-These parameters are self-explanatory. 
+These parameters are self-explanatory except few:
 
-#### Result:
+**--parallel** - will add parallel clause to table insert and index creation phase, as well as put *NOPARALEL* on index after, remove this noparallel if not needed.
+
+**--key** - will add select to generated statements to get minn/max value for key
+
+**--remap** "USERS:NEW\_USERS, USERS_IDX:NEW\_USER\_INDEXES" - remap tablespace in createad scripts, OLD:NEW pairs ofd the tablespace names
+
+#### Result: 
 As a result, you will have the SQL script generated.
 After you add one partition to the table part, you can run the script step by step. Please **note** that some of the big tables can take a lot of time and space to copy to the newly created table.
 
-After you have at least one partition you can use partition_merlin script to add partitions to your table. Remember, that minimal partition should fit your requirements for the minimal value of the date. 
+After you have at least one partition you can use **partition_merlin** script to add partitions to your table. Remember, that minimal partition should fit your requirements for the minimal value of the date. 
 
 
 
 ## Acknowledgments
 
 * Hat tip to anyone whose code was used
-* Inspiration: laziness to do this by hand
+* Inspiration: laziness to do this by hands
 * Please report bug/feature requests to the author/support group
-
 
 

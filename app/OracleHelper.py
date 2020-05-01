@@ -18,7 +18,7 @@ class OracleHelper:
             self.logger.critical(f"cx_Oracle error: {e.args[0]}")
 
 
-    def _connect(self, **kwargs) -> None:
+    def connect(self, **kwargs) -> None:
         try:
             # 2DO: add check for connection type and change connection style depending on this
             if self.connection_info.get("connection_type", 'tns') == 'direct':
@@ -43,7 +43,6 @@ class OracleHelper:
             self.logger.info("Oracle connection created ")
         except Exception as e:
             self.logger.critical(f"cx_Oracle error: {e.args[0]}")
-
 
     def runSelect(self, sql, params) -> list:
         self.logger.debug(f"Number of parameters: {len(params)}")
